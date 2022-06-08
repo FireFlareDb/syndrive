@@ -1,7 +1,6 @@
 from __future__ import print_function
-from multiprocessing.context import SpawnContext
 
-import os.path
+import os
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
@@ -9,6 +8,9 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from watchdog.events import LoggingEventHandler
+from watchdog.observers import Observer
 
 
 class MyGoogleDrive:
@@ -44,9 +46,9 @@ class MyGoogleDrive:
         for item in items:
             print(u'{0} ({1})'.format(item['name'], item['id']))
 
-    def upload_file(self, filename, path):
+    def upload_file(self, path, filename):
         FOLDER_ID = "1PyIBynk6dk5200DnWXV3C_t9xjVciTkD"
-        media = MediaFileUpload(filename)
+        media = MediaFileUpload(path)
 
         response = self.service.files().list(
             q=f"name='{filename}' and parents='{FOLDER_ID}'",
@@ -62,14 +64,42 @@ class MyGoogleDrive:
             print(f"File Uploaded: {file.get('id')}")
         else:
             for file in response.get('files', []):
-                file = self.service.files().update(fileId=file.get('id'), media_body=media).execute()
+                file = self.service.files().update(
+                    fileId=file.get('id'), media_body=media).execute()
                 print(f"File Updated: {file.get('name')}")
 
 
-def main():
-    my_drive = MyGoogleDrive()
-    my_drive.upload_file("dataforme.txt", "dataforme.txt")
+class EventHandler(LoggingEventHandler):
+    def on_modified(self, event):
+        print("Watchdog received modified event - % s." % event.src_path)
+
+        filename = event.src_path.split('/')[-1]
+        if event.src_path != "SRC_LOC":
+            my_drive.upload_file(event.src_path, filename)
+
+    def on_created(self, event):
+        print("Watchdog received modified event - % s." % event.src_path)
+
+        filename = event.src_path.split('/')[-1]
+        if event.src_path != "SRC_LOC":
+            my_drive.upload_file(event.src_path, filename)
 
 
 if __name__ == '__main__':
-    main()
+    src_path = "SRC_LOC/"
+    my_drive = MyGoogleDrive()
+    handler = EventHandler()
+    observer = Observer()
+    observer.schedule(handler, path=src_path, recursive=True)
+    observer.start()
+
+    try:
+        while observer.is_alive():
+            observer.join()
+    except KeyboardInterrupt:
+        print("\nProcess Terminated\n")
+    except Exception as e:
+        print(e)
+    finally:
+        observer.stop()
+        observer.join()
