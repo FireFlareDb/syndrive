@@ -68,6 +68,19 @@ class MyGoogleDrive:
                     fileId=file.get('id'), media_body=media).execute()
                 print(f"File Updated: {file.get('name')}")
 
+    def delete_file(self, filename):
+        FOLDER_ID = "1PyIBynk6dk5200DnWXV3C_t9xjVciTkD"
+
+        response = self.service.files().list(
+            q=f"name='{filename}' and parents='{FOLDER_ID}'",
+            spaces="drive",
+            fields="nextPageToken, files(id, name)",
+            pageToken=None).execute()
+
+        if len(response["files"]) != 0:
+            for file in response.get('files', []):
+                self.service.files().delete(fileId=file.get('id')).execute()
+
 
 class EventHandler(LoggingEventHandler):
     def on_modified(self, event):
@@ -78,11 +91,16 @@ class EventHandler(LoggingEventHandler):
             my_drive.upload_file(event.src_path, filename)
 
     def on_created(self, event):
-        print("Watchdog received modified event - % s." % event.src_path)
+        print("Watchdog received created event - % s." % event.src_path)
 
         filename = event.src_path.split('/')[-1]
         if event.src_path != "SRC_LOC":
             my_drive.upload_file(event.src_path, filename)
+
+    def on_deleted(self, event):
+        print("Watchdog received deleted event - % s." % event.src_path)
+        filename = event.src_path.split('/')[-1]
+        my_drive.delete_file(filename)
 
 
 if __name__ == '__main__':
