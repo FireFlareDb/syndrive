@@ -1,3 +1,4 @@
 *.json
 *.txt
 venv/
+SRC_LOC/
